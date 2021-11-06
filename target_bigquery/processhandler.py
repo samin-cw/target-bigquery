@@ -15,7 +15,7 @@ from target_bigquery.encoders import DecimalEncoder
 from target_bigquery.schema import build_schema, cleanup_record, format_record_to_schema
 
 from target_bigquery.simplify_json_schema import simplify
-from target_bigquery.validate_json_schema import validate_json_schema_completeness, \
+from target_bigquery.validate_json_schema import LOGGER, validate_json_schema_completeness, \
     check_schema_for_dupes_in_field_names
 
 
@@ -366,7 +366,41 @@ class PartialLoadJobProcessHandler(LoadJobProcessHandler):
             return
 
         self._do_temp_table_based_load(rows)
+        self._delete_deleted()
         yield self.STATE
+    
+    def _delete_deleted(self):
+        
+        for table in self.schemas.keys():
+            props = self.schemas[table]['properties']
+            concat_str = ', '.join([p for p in props if p != '_sdc_deleted_at' ])
+            LOGGER.info('''
+                DELETE 
+                FROM `{project_id}.{dataset_id}.{table}`
+                WHERE CONCAT({concat_str}) IN (
+
+                    SELECT CONCAT({concat_str})
+                    FROM `{project_id}.{dataset_id}.{table}`
+                    WHERE _sdc_deleted_at is not null
+                
+                )
+                '''.format(project_id=self.project_id, dataset_id=self.dataset.dataset_id ,table=table, concat_str=concat_str))
+            query_job = self.client.query(
+                '''
+                DELETE 
+                FROM `{project_id}.{dataset_id}.{table}`
+                WHERE CONCAT({concat_str}) IN (
+
+                    SELECT CONCAT({concat_str})
+                    FROM `{project_id}.{dataset_id}.{table}`
+                    WHERE _sdc_deleted_at is not null
+                
+                )
+                '''.format(project_id=self.project_id, dataset_id=self.dataset.dataset_id ,table=table, concat_str=concat_str)
+            )
+            result = query_job.result()
+            # LOGGER.info(result)
+
 
 
 class BookmarksStatePartialLoadJobProcessHandler(PartialLoadJobProcessHandler):

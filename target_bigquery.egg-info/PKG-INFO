@@ -1,0 +1,14 @@
+Metadata-Version: 2.1
+Name: target-bigquery
+Version: 0.11.0
+Summary: Singer.io target for writing data to Google BigQuery
+Home-page: https://github.com/adswerve/target-bigquery
+Author: Adswerve
+License: UNKNOWN
+Platform: UNKNOWN
+Classifier: Programming Language :: Python :: 3 :: Only
+Provides-Extra: dev
+License-File: LICENSE
+
+UNKNOWN
+
