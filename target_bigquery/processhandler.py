@@ -371,30 +371,67 @@ class PartialLoadJobProcessHandler(LoadJobProcessHandler):
     
     def _delete_deleted(self):
         
-        for table in self.schemas.keys():
-            props = self.schemas[table]['properties']
-            concat_str = ', '.join([p for p in props if p != '_sdc_deleted_at' ])
+        for table in self.key_properties.keys():
+            key_props = self.key_properties[table]
+            concat_str = ', '.join(key_props)
             LOGGER.info('''
                 DELETE 
                 FROM `{project_id}.{dataset_id}.{table}`
-                WHERE CONCAT({concat_str}) IN (
-
-                    SELECT CONCAT({concat_str})
+                WHERE CONCAT({concat_str}, _time_extracted) IN (
+                    SELECT CONCAT({concat_str}, _time_extracted)
                     FROM `{project_id}.{dataset_id}.{table}`
-                    WHERE _sdc_deleted_at is not null
-                
+                    INNER JOIN (
+                        SELECT CONCAT({concat_str}) AS key_prop, _time_extracted AS _time_deleted
+                        FROM `{project_id}.{dataset_id}.{table}`
+                        WHERE _sdc_deleted_at IS NOT NULL
+                    ) ON key_prop = CONCAT({concat_str})
+                    WHERE _time_extracted <= _time_deleted
                 )
                 '''.format(project_id=self.project_id, dataset_id=self.dataset.dataset_id ,table=table, concat_str=concat_str))
             query_job = self.client.query(
                 '''
                 DELETE 
                 FROM `{project_id}.{dataset_id}.{table}`
-                WHERE CONCAT({concat_str}) IN (
-
-                    SELECT CONCAT({concat_str})
+                WHERE CONCAT({concat_str}, _time_extracted) IN (
+                    SELECT CONCAT({concat_str}, _time_extracted)
                     FROM `{project_id}.{dataset_id}.{table}`
-                    WHERE _sdc_deleted_at is not null
-                
+                    INNER JOIN (
+                        SELECT CONCAT({concat_str}) AS key_prop, _time_extracted AS _time_deleted
+                        FROM `{project_id}.{dataset_id}.{table}`
+                        WHERE _sdc_deleted_at IS NOT NULL
+                    ) ON key_prop = CONCAT({concat_str})
+                    WHERE _time_extracted <= _time_deleted
+                )
+                '''.format(project_id=self.project_id, dataset_id=self.dataset.dataset_id ,table=table, concat_str=concat_str)
+            )
+            result = query_job.result()
+            LOGGER.info('''
+                DELETE
+                FROM `{project_id}.{dataset_id}.{table}`
+                WHERE CONCAT({concat_str}, _time_extracted) IN (
+                    SELECT CONCAT({concat_str}, _time_extracted)
+                    FROM `{project_id}.{dataset_id}.{table}`
+                    INNER JOIN (
+                        SELECT CONCAT({concat_str}) AS key_prop, MAX(_time_extracted) AS _time_last_entry
+                        FROM `{project_id}.{dataset_id}.{table}`
+                        GROUP BY CONCAT({concat_str})
+                    ) ON key_prop = CONCAT({concat_str})
+                    WHERE _time_extracted < _time_last_entry
+                )
+                '''.format(project_id=self.project_id, dataset_id=self.dataset.dataset_id ,table=table, concat_str=concat_str))
+            query_job = self.client.query(
+                '''
+                DELETE
+                FROM `{project_id}.{dataset_id}.{table}`
+                WHERE CONCAT({concat_str}, _time_extracted) IN (
+                    SELECT CONCAT({concat_str}, _time_extracted)
+                    FROM `{project_id}.{dataset_id}.{table}`
+                    INNER JOIN (
+                        SELECT CONCAT({concat_str}) AS key_prop, MAX(_time_extracted) AS _time_last_entry
+                        FROM `{project_id}.{dataset_id}.{table}`
+                        GROUP BY CONCAT({concat_str})
+                    ) ON key_prop = CONCAT({concat_str})
+                    WHERE _time_extracted < _time_last_entry
                 )
                 '''.format(project_id=self.project_id, dataset_id=self.dataset.dataset_id ,table=table, concat_str=concat_str)
             )
